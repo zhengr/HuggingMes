@@ -12,6 +12,7 @@ const GATEWAY_HOST = "127.0.0.1";
 const startTime = Date.now();
 const API_SERVER_KEY = process.env.API_SERVER_KEY || "";
 const APP_BASE = "/app";
+const AUTH_REALM = "HuggingMess";
 
 const SYNC_STATUS_FILE = "/tmp/huggingmess-sync-status.json";
 const UPTIMEROBOT_STATUS_FILE = "/tmp/huggingmess-uptimerobot-status.json";
@@ -36,6 +37,41 @@ function readJson(path, fallback = null) {
     if (fs.existsSync(path)) return JSON.parse(fs.readFileSync(path, "utf8"));
   } catch {}
   return fallback;
+}
+
+function getBearerToken(req) {
+  const value = req.headers.authorization || "";
+  const match = /^Bearer\s+(.+)$/i.exec(value);
+  return match ? match[1] : "";
+}
+
+function getBasicPassword(req) {
+  const value = req.headers.authorization || "";
+  const match = /^Basic\s+(.+)$/i.exec(value);
+  if (!match) return "";
+  try {
+    const decoded = Buffer.from(match[1], "base64").toString("utf8");
+    const separator = decoded.indexOf(":");
+    return separator >= 0 ? decoded.slice(separator + 1) : "";
+  } catch {
+    return "";
+  }
+}
+
+function isAuthorized(req) {
+  if (!API_SERVER_KEY) return true;
+  return getBearerToken(req) === API_SERVER_KEY || getBasicPassword(req) === API_SERVER_KEY;
+}
+
+function requireAuth(req, res) {
+  if (isAuthorized(req)) return true;
+  res.writeHead(401, {
+    "content-type": "text/plain; charset=utf-8",
+    "www-authenticate": `Basic realm="${AUTH_REALM}", charset="UTF-8"`,
+    "cache-control": "no-store",
+  });
+  res.end("Authentication required. Use any username and your GATEWAY_TOKEN as the password.");
+  return false;
 }
 
 function proxyRequest(req, res, targetPort, rewritePath = (path) => path) {
@@ -120,7 +156,7 @@ function badge(label, state) {
 
 function renderDashboard(data) {
   const syncStatus = String(data.backup?.status || "unknown").toUpperCase();
-  const dashboardLink = data.dashboard ? `<a class="button" href="${APP_BASE}/">Open Hermes App</a>` : "";
+  const dashboardLink = data.dashboard ? `<a class="button" href="${APP_BASE}/" target="_blank" rel="noopener noreferrer">Open Hermes App</a>` : "";
   const apiLink = data.gateway ? `<a class="button secondary" href="/v1/models">API Models</a>` : "";
   const keepAlive = data.uptimerobot?.configured
     ? `UptimeRobot is monitoring <code>${data.uptimerobot.url}</code>.`
@@ -216,6 +252,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === APP_BASE || path.startsWith(`${APP_BASE}/`)) {
+    if (!requireAuth(req, res)) return;
     proxyRequest(req, res, DASHBOARD_PORT, (p) => p.replace(/^\/app/, "") || "/");
     return;
   }
@@ -227,6 +264,7 @@ const server = http.createServer(async (req, res) => {
     path.startsWith("/dashboard-plugins/") ||
     path.startsWith("/ds-assets/")
   ) {
+    if (!requireAuth(req, res)) return;
     proxyRequest(req, res, DASHBOARD_PORT);
     return;
   }
@@ -252,13 +290,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/v1" || path.startsWith("/v1/")) {
-    if (API_SERVER_KEY) {
-      const expected = `Bearer ${API_SERVER_KEY}`;
-      if (req.headers.authorization !== expected) {
-        res.writeHead(401, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "unauthorized", message: "Use Authorization: Bearer <GATEWAY_TOKEN>." }));
-        return;
-      }
+    if (!isAuthorized(req)) {
+      res.writeHead(401, {
+        "content-type": "application/json",
+        "www-authenticate": `Bearer realm="${AUTH_REALM}"`,
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify({ error: "unauthorized", message: "Use Authorization: Bearer <GATEWAY_TOKEN>." }));
+      return;
     }
     proxyRequest(req, res, GATEWAY_PORT);
     return;

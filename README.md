@@ -46,6 +46,23 @@ HuggingMess runs [Nous Research Hermes Agent](https://github.com/NousResearch/he
 | `CLOUDFLARE_WORKERS_TOKEN` | Optional | Auto-creates a Worker proxy for Telegram Bot API traffic |
 | `UPTIMEROBOT_API_KEY` | Optional | Auto-creates a monitor for `/health` |
 
+## Access Control
+
+Hermes' built-in dashboard is local-first and does not provide its own public auth layer. HuggingMess adds wrapper-level auth for the exposed Space routes.
+
+Set this Space secret:
+
+```text
+GATEWAY_TOKEN=your-strong-password-or-token
+```
+
+Then:
+
+- Opening `/app/` asks for browser Basic Auth.
+- Use any username.
+- Use `GATEWAY_TOKEN` as the password.
+- API routes under `/v1/*` accept `Authorization: Bearer <GATEWAY_TOKEN>`.
+
 ## LLM Providers
 
 HuggingMess supports two configuration styles:
