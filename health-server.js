@@ -17,7 +17,8 @@ const LOGIN_PATH = "/login";
 const SESSION_COOKIE = "huggingmess_session";
 
 const SYNC_STATUS_FILE = "/tmp/huggingmess-sync-status.json";
-const CLOUDFLARE_KEEPALIVE_STATUS_FILE = "/tmp/huggingmess-cloudflare-keepalive-status.json";
+const CLOUDFLARE_KEEPALIVE_STATUS_FILE =
+  "/tmp/huggingmess-cloudflare-keepalive-status.json";
 
 function canConnect(port, host = GATEWAY_HOST, timeoutMs = 600) {
   return new Promise((resolve) => {
@@ -94,7 +95,10 @@ function isAuthorized(req) {
   if (!API_SERVER_KEY) return true;
   return (
     timingSafeEqualString(getBearerToken(req), API_SERVER_KEY) ||
-    timingSafeEqualString(parseCookies(req)[SESSION_COOKIE], expectedSessionValue())
+    timingSafeEqualString(
+      parseCookies(req)[SESSION_COOKIE],
+      expectedSessionValue(),
+    )
   );
 }
 
@@ -110,7 +114,9 @@ function loginUrl(nextPath) {
 
 function renderLoginPage(nextPath, errorMessage = "") {
   const safeNext = sanitizeNext(nextPath);
-  const errorHtml = errorMessage ? `<div class="error">${escapeHtml(errorMessage)}</div>` : "";
+  const errorHtml = errorMessage
+    ? `<div class="error">${escapeHtml(errorMessage)}</div>`
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -182,7 +188,9 @@ function wantsHtml(req) {
 }
 
 async function handleLogin(req, res, parsed) {
-  const nextPath = sanitizeNext(parsed.searchParams.get("next") || `${APP_BASE}/`);
+  const nextPath = sanitizeNext(
+    parsed.searchParams.get("next") || `${APP_BASE}/`,
+  );
 
   if (!API_SERVER_KEY) {
     redirect(res, nextPath);
@@ -215,7 +223,12 @@ async function handleLogin(req, res, parsed) {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-store",
       });
-      res.end(renderLoginPage(submittedNext, "That token did not match GATEWAY_TOKEN."));
+      res.end(
+        renderLoginPage(
+          submittedNext,
+          "That token did not match GATEWAY_TOKEN.",
+        ),
+      );
       return;
     }
 
@@ -234,7 +247,13 @@ async function handleLogin(req, res, parsed) {
   }
 }
 
-function proxyRequest(req, res, targetPort, rewritePath = (path) => path, headerOverrides = {}) {
+function proxyRequest(
+  req,
+  res,
+  targetPort,
+  rewritePath = (path) => path,
+  headerOverrides = {},
+) {
   const parsed = new URL(req.url, "http://localhost");
   const targetPath = rewritePath(parsed.pathname) + parsed.search;
   const headers = {
@@ -286,10 +305,17 @@ async function statusPayload() {
   const gateway = await canConnect(GATEWAY_PORT);
   const dashboard = await canConnect(DASHBOARD_PORT);
   const telegramWebhook =
-    !!process.env.TELEGRAM_WEBHOOK_URL && (await canConnect(TELEGRAM_WEBHOOK_PORT));
-  const sync = readJson(SYNC_STATUS_FILE, process.env.HF_TOKEN
-    ? { status: "configured", message: "Backup is enabled; waiting for the first sync." }
-    : { status: "disabled", message: "HF_TOKEN is not configured." });
+    !!process.env.TELEGRAM_WEBHOOK_URL &&
+    (await canConnect(TELEGRAM_WEBHOOK_PORT));
+  const sync = readJson(
+    SYNC_STATUS_FILE,
+    process.env.HF_TOKEN
+      ? {
+          status: "configured",
+          message: "Backup is enabled; waiting for the first sync.",
+        }
+      : { status: "disabled", message: "HF_TOKEN is not configured." },
+  );
 
   return {
     ok: gateway,
@@ -311,8 +337,15 @@ async function statusPayload() {
       webhookListening: telegramWebhook,
       proxy: process.env.CLOUDFLARE_PROXY_URL || "",
     },
-    model: process.env.MODEL_FOR_CONFIG || process.env.HERMES_MODEL || process.env.LLM_MODEL || "",
-    provider: process.env.PROVIDER_FOR_CONFIG || process.env.HERMES_INFERENCE_PROVIDER || "auto",
+    model:
+      process.env.MODEL_FOR_CONFIG ||
+      process.env.HERMES_MODEL ||
+      process.env.LLM_MODEL ||
+      "",
+    provider:
+      process.env.PROVIDER_FOR_CONFIG ||
+      process.env.HERMES_INFERENCE_PROVIDER ||
+      "auto",
     backup: sync,
     keepalive: readJson(CLOUDFLARE_KEEPALIVE_STATUS_FILE, null),
   };
@@ -327,10 +360,18 @@ function toneBadge(label, tone = "neutral") {
 }
 
 function valueOrUnset(value, fallback = "Not set") {
-  return value ? escapeHtml(value) : `<span class="muted">${escapeHtml(fallback)}</span>`;
+  return value
+    ? escapeHtml(value)
+    : `<span class="muted">${escapeHtml(fallback)}</span>`;
 }
 
-function renderTile({ title, value, detail = "", tone = "neutral", meta = "" }) {
+function renderTile({
+  title,
+  value,
+  detail = "",
+  tone = "neutral",
+  meta = "",
+}) {
   return `<article class="tile ${tone}">
     <div class="tile-head">
       <span class="tile-title">${escapeHtml(title)}</span>
@@ -344,65 +385,76 @@ function renderTile({ title, value, detail = "", tone = "neutral", meta = "" }) 
 
 function renderDashboard(data) {
   const syncStatus = String(data.backup?.status || "unknown");
-  const syncTone = ["success", "restored", "synced", "configured"].includes(syncStatus) ? "ok" : syncStatus === "disabled" ? "warn" : "neutral";
-  const telegramTone = data.telegram.configured ? (data.telegram.webhookListening || !data.telegram.webhook ? "ok" : "warn") : "warn";
+  const syncTone = ["success", "restored", "synced", "configured"].includes(
+    syncStatus,
+  )
+    ? "ok"
+    : syncStatus === "disabled"
+      ? "warn"
+      : "neutral";
+  const telegramTone = data.telegram.configured
+    ? data.telegram.webhookListening || !data.telegram.webhook
+      ? "ok"
+      : "warn"
+    : "warn";
   const keepaliveConfigured = data.keepalive?.configured === true;
-  const keepaliveStatus = String(data.keepalive?.status || (process.env.CLOUDFLARE_WORKERS_TOKEN ? "pending" : "not configured"));
-  const keepAliveTone = keepaliveConfigured ? "ok" : process.env.CLOUDFLARE_WORKERS_TOKEN ? "warn" : "neutral";
-  const telegramDetail = data.telegram.configured
-    ? `${data.telegram.webhook ? "Webhook mode" : "Polling mode"}${data.telegram.proxy ? ` through Cloudflare proxy` : ""}.`
-    : "Add TELEGRAM_BOT_TOKEN to enable Telegram.";
-  const backupDetail = data.backup?.message ? escapeHtml(data.backup.message) : "No backup status has been written yet.";
-  const backupMeta = data.backup?.timestamp ? `Last update ${escapeHtml(data.backup.timestamp)}` : "";
-  const keepAliveDetail = keepaliveConfigured
-    ? `Worker <code>${escapeHtml(data.keepalive.workerName || "keepalive")}</code> pings <code>${escapeHtml(data.keepalive.targetUrl || "/health")}</code>.`
+  const keepaliveStatus = String(
+    data.keepalive?.status ||
+      (process.env.CLOUDFLARE_WORKERS_TOKEN ? "pending" : "not configured"),
+  );
+  const keepAliveTone = keepaliveConfigured
+    ? "ok"
     : process.env.CLOUDFLARE_WORKERS_TOKEN
-      ? "Cloudflare keep-awake Worker is pending or failed; check Space logs."
-      : "Add CLOUDFLARE_WORKERS_TOKEN to create a scheduled keep-awake Worker.";
+      ? "warn"
+      : "neutral";
+  const telegramDetail = data.telegram.configured
+    ? `${data.telegram.webhook ? "Webhook" : "Polling"}${data.telegram.proxy ? " via CF proxy" : ""}`
+    : "Not configured";
+  const backupDetail = data.backup?.message ? escapeHtml(data.backup.message) : "No status yet";
+  const keepAliveDetail = keepaliveConfigured
+    ? `Pinging <code>${escapeHtml(data.keepalive.targetUrl || "/health")}</code>`
+    : process.env.CLOUDFLARE_WORKERS_TOKEN
+      ? "Worker pending or failed"
+      : "Not configured";
   const serviceOk = data.gateway && data.dashboard;
 
   const tiles = [
     renderTile({
       title: "Gateway",
       value: toneBadge(data.gateway ? "Online" : "Offline", data.gateway ? "ok" : "off"),
-      detail: data.gateway ? `OpenAI-compatible API on port <code>${data.ports.gateway}</code>.` : `Gateway API is not reachable on port <code>${data.ports.gateway}</code>.`,
+      detail: data.gateway ? `API on port ${data.ports.gateway}` : `Unreachable`,
       tone: data.gateway ? "ok" : "off",
-      meta: data.authConfigured ? `Protected by <code>GATEWAY_TOKEN</code>.` : `Set <code>GATEWAY_TOKEN</code> before sharing.`,
+      meta: data.authConfigured ? "Protected" : "Unprotected",
     }),
     renderTile({
       title: "Model",
       value: `<code>${valueOrUnset(data.model)}</code>`,
-      detail: `Provider <code>${valueOrUnset(data.provider || "auto")}</code>.`,
+      detail: `Provider: ${valueOrUnset(data.provider || "auto")}`,
       tone: data.model ? "ok" : "warn",
-      meta: "Gemini example: google/gemini-2.5-flash",
     }),
     renderTile({
       title: "Runtime",
       value: escapeHtml(data.uptime),
-      detail: `Public port <code>${data.ports.public}</code>; health at <code>/health</code>.`,
+      detail: `Port ${data.ports.public}`,
       tone: "neutral",
-      meta: `Started <code>${escapeHtml(data.startedAt)}</code>.`,
     }),
     renderTile({
       title: "Telegram",
       value: toneBadge(data.telegram.configured ? "Configured" : "Disabled", telegramTone),
       detail: telegramDetail,
       tone: telegramTone,
-      meta: data.telegram.webhookUrl ? `<code>${escapeHtml(data.telegram.webhookUrl)}</code>` : "",
     }),
     renderTile({
       title: "Backup",
       value: toneBadge(syncStatus.toUpperCase(), syncTone),
       detail: backupDetail,
       tone: syncTone,
-      meta: backupMeta,
     }),
     renderTile({
       title: "Keep Awake",
-      value: toneBadge(keepaliveConfigured ? "Cloudflare cron" : keepaliveStatus.toUpperCase(), keepAliveTone),
+      value: toneBadge(keepaliveConfigured ? "CF Cron" : keepaliveStatus.toUpperCase(), keepAliveTone),
       detail: keepAliveDetail,
       tone: keepAliveTone,
-      meta: keepaliveConfigured ? `Schedule <code>${escapeHtml(data.keepalive.cron || "*/10 * * * *")}</code>.` : "",
     }),
   ].join("");
 
@@ -457,7 +509,7 @@ function renderDashboard(data) {
   <main>
     <header>
       <h1>HuggingMess</h1>
-      <div class="subtitle">Self-hosted - Hugging Face Spaces - Hermes Agent</div>
+      <div class="subtitle">Self-hosted - Hermes Agent</div>
     </header>
     <a class="hero-action" href="${APP_BASE}/" target="_blank" rel="noopener noreferrer">Open Hermes Agent -></a>
     <section class="overview">
@@ -481,7 +533,13 @@ const server = http.createServer(async (req, res) => {
   if (path === "/health" || path === `${APP_BASE}/health`) {
     const data = await statusPayload();
     res.writeHead(data.ok ? 200 : 503, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: data.ok, gateway: data.gateway, uptime: data.uptime }));
+    res.end(
+      JSON.stringify({
+        ok: data.ok,
+        gateway: data.gateway,
+        uptime: data.uptime,
+      }),
+    );
     return;
   }
 
@@ -511,7 +569,12 @@ const server = http.createServer(async (req, res) => {
 
   if (path === APP_BASE || path.startsWith(`${APP_BASE}/`)) {
     if (!requireAuth(req, res)) return;
-    proxyRequest(req, res, DASHBOARD_PORT, (p) => p.replace(/^\/app/, "") || "/");
+    proxyRequest(
+      req,
+      res,
+      DASHBOARD_PORT,
+      (p) => p.replace(/^\/app/, "") || "/",
+    );
     return;
   }
 
@@ -557,12 +620,18 @@ const server = http.createServer(async (req, res) => {
         "content-type": "application/json",
         "cache-control": "no-store",
       });
-      res.end(JSON.stringify({ error: "unauthorized", message: "Use Authorization: Bearer <GATEWAY_TOKEN>." }));
+      res.end(
+        JSON.stringify({
+          error: "unauthorized",
+          message: "Use Authorization: Bearer <GATEWAY_TOKEN>.",
+        }),
+      );
       return;
     }
-    const upstreamHeaders = getBearerToken(req) || !API_SERVER_KEY
-      ? {}
-      : { authorization: `Bearer ${API_SERVER_KEY}` };
+    const upstreamHeaders =
+      getBearerToken(req) || !API_SERVER_KEY
+        ? {}
+        : { authorization: `Bearer ${API_SERVER_KEY}` };
     proxyRequest(req, res, GATEWAY_PORT, (p) => p, upstreamHeaders);
     return;
   }

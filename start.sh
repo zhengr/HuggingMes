@@ -243,32 +243,6 @@ path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
 path.chmod(0o600)
 PY
 
-echo ""
-echo "Hermes model : ${MODEL_FOR_CONFIG:-using Hermes default/restored config}"
-echo "Provider     : ${PROVIDER_FOR_CONFIG:-using Hermes default/restored config}"
-echo "Public port  : ${PUBLIC_PORT}"
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-  echo "Telegram     : enabled"
-  if [ -n "${TELEGRAM_WEBHOOK_URL:-}" ]; then
-    echo "Telegram mode: webhook (${TELEGRAM_WEBHOOK_URL})"
-  else
-    echo "Telegram mode: polling"
-  fi
-else
-  echo "Telegram     : not configured"
-fi
-if [ -n "${HF_TOKEN:-}" ]; then
-  echo "Backup       : ${BACKUP_DATASET} every ${SYNC_INTERVAL}s"
-else
-  echo "Backup       : disabled"
-fi
-if [ -n "${CLOUDFLARE_PROXY_URL:-}" ]; then
-  echo "Proxy        : ${CLOUDFLARE_PROXY_URL}"
-fi
-if [ -n "${SPACE_HOST:-}" ]; then
-  echo "Space URL    : https://${SPACE_HOST}"
-fi
-echo ""
 
 graceful_shutdown() {
   echo "Shutting down HuggingMess..."

@@ -7,9 +7,9 @@ Thanks for improving HuggingMess.
 Run these before submitting changes:
 
 ```bash
-bash -n start.sh setup-uptimerobot.sh
+bash -n start.sh
 node --check health-server.js
-python3 -m py_compile hermes-sync.py cloudflare-proxy-setup.py
+python3 -m py_compile hermes-sync.py cloudflare-proxy-setup.py cloudflare-keepalive-setup.py
 ```
 
 If Docker is available:
