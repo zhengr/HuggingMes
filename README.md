@@ -1,11 +1,146 @@
 ---
 title: HuggingMess
 emoji: 📚
-colorFrom: red
-colorTo: blue
+colorFrom: blue
+colorTo: indigo
 sdk: docker
-pinned: false
-short_description: Run Harmess agent for free on HuggingFace Space
+app_port: 7861
+pinned: true
+license: mit
+secrets:
+  - name: LLM_API_KEY
+    description: "Your LLM provider API key. HuggingMess maps it to the right Hermes provider env var."
+  - name: LLM_MODEL
+    description: "Model ID, e.g. openrouter/anthropic/claude-sonnet-4 or anthropic/claude-opus-4.6."
+  - name: TELEGRAM_BOT_TOKEN
+    description: "Telegram bot token from @BotFather."
+  - name: TELEGRAM_ALLOWED_USERS
+    description: "Comma-separated numeric Telegram user IDs allowed to use the bot."
+  - name: GATEWAY_TOKEN
+    description: "Bearer token for the proxied Hermes API routes."
+  - name: HF_TOKEN
+    description: "Hugging Face token with write access for private Dataset backup."
+  - name: CLOUDFLARE_WORKERS_TOKEN
+    description: "Cloudflare API token for automatic Worker proxy setup."
+  - name: UPTIMEROBOT_API_KEY
+    description: "UptimeRobot Main API key for automatic keep-awake monitor setup."
 ---
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+# HuggingMess
+
+HuggingMess runs [Nous Research Hermes Agent](https://github.com/NousResearch/hermes-agent) as a Hugging Face Docker Space. It follows the same practical shape as HuggingClaw: one public Space port, Telegram gateway support, Cloudflare Worker proxy setup, UptimeRobot keep-awake, and private HF Dataset backup for Hermes state.
+
+## Quick Start
+
+1. Duplicate this Space or push this folder to a new Docker Space.
+2. Add these secrets in Space Settings:
+
+| Secret | Required | Notes |
+| :--- | :--- | :--- |
+| `LLM_MODEL` | Yes | Examples: `openrouter/anthropic/claude-sonnet-4`, `anthropic/claude-opus-4.6`, `google/gemini-2.5-flash` |
+| `LLM_API_KEY` | Usually | Used to populate the provider-specific env var automatically |
+| `TELEGRAM_BOT_TOKEN` | For Telegram | Bot token from BotFather |
+| `TELEGRAM_ALLOWED_USERS` | Recommended | Comma-separated numeric Telegram user IDs |
+| `GATEWAY_TOKEN` | Recommended | Bearer token for `/v1/*` API routes |
+| `HF_TOKEN` | Optional | Enables private Dataset backup named `huggingmess-backup` |
+| `CLOUDFLARE_WORKERS_TOKEN` | Optional | Auto-creates a Worker proxy for Telegram Bot API traffic |
+| `UPTIMEROBOT_API_KEY` | Optional | Auto-creates a monitor for `/health` |
+
+## Telegram on HF Spaces
+
+When `TELEGRAM_BOT_TOKEN` and `SPACE_HOST` are present, HuggingMess defaults Telegram to webhook mode:
+
+```bash
+TELEGRAM_WEBHOOK_URL=https://your-space.hf.space/telegram
+TELEGRAM_WEBHOOK_PORT=8765
+```
+
+If you need polling instead, set:
+
+```bash
+TELEGRAM_MODE=polling
+```
+
+Hermes requires numeric Telegram IDs for allowlists. You can use either Hermes-native `TELEGRAM_ALLOWED_USERS` or the HuggingClaw-style aliases `TELEGRAM_USER_ID` / `TELEGRAM_USER_IDS`.
+
+## Cloudflare Proxy
+
+Hugging Face Spaces can be restrictive for outbound bot API traffic. Add `CLOUDFLARE_WORKERS_TOKEN`, and HuggingMess will:
+
+1. create a Cloudflare Worker,
+2. generate a shared proxy secret,
+3. set Hermes Telegram `base_url` to `https://worker.example.workers.dev/bot`,
+4. set `base_file_url` to `https://worker.example.workers.dev/file/bot`.
+
+Manual mode is also supported:
+
+```bash
+CLOUDFLARE_PROXY_URL=https://your-worker.workers.dev
+CLOUDFLARE_PROXY_SECRET=optional-shared-secret
+```
+
+The manual Worker source is included in `cloudflare-worker.js`.
+
+## Backup
+
+Set `HF_TOKEN` with write access to enable backup. HuggingMess syncs `/opt/data` to a private Dataset named `huggingmess-backup` every 180 seconds by default.
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `BACKUP_DATASET_NAME` | `huggingmess-backup` | Dataset name under your HF account |
+| `SYNC_INTERVAL` | `180` | Backup interval in seconds |
+| `SYNC_INCLUDE_ENV` | `false` | Include `/opt/data/.env` in backup |
+
+By default `.env` is excluded from backups because HF Space secrets are already injected at runtime.
+
+## Keep Awake
+
+Add `UPTIMEROBOT_API_KEY`, and HuggingMess creates or reuses a monitor for:
+
+```text
+https://your-space.hf.space/health
+```
+
+Optional UptimeRobot variables:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `UPTIMEROBOT_MONITOR_NAME` | `HuggingMess <space>` | Friendly monitor name |
+| `UPTIMEROBOT_INTERVAL` | `300` | Monitor interval in seconds |
+| `UPTIMEROBOT_ALERT_CONTACTS` | unset | Dash-separated alert contact IDs |
+
+## Local Development
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://localhost:7861
+```
+
+## Useful Routes
+
+| Route | Purpose |
+| :--- | :--- |
+| `/` | HuggingMess dashboard |
+| `/health` | Health check for HF and UptimeRobot |
+| `/status` | JSON status |
+| `/dashboard/` | Proxied Hermes dashboard |
+| `/v1/models` | Proxied Hermes OpenAI-compatible API server |
+| `/telegram` | Telegram webhook endpoint |
+
+The `/v1/*` routes require:
+
+```text
+Authorization: Bearer <GATEWAY_TOKEN>
+```
+
+## Links
+
+- [Hermes Agent GitHub](https://github.com/NousResearch/hermes-agent)
+- [Hermes Agent Docs](https://hermes-agent.nousresearch.com/docs)
+- [Hermes Docker Docs](https://hermes-agent.nousresearch.com/docs/user-guide/docker/)
+- [Hermes Telegram Docs](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/telegram)
