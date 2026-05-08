@@ -64,6 +64,12 @@ p.write_text(src.replace(old, new), encoding="utf-8")
 print("kanban patch: applied")
 PY
 
+# Ensure hermes CLI is discoverable in ALL shell types (login, interactive,
+# non-interactive). /etc/profile.d/ is sourced by login shells after /etc/profile
+# resets PATH, so this survives even full environment resets.
+RUN echo 'export PATH="/opt/hermes/.venv/bin:/opt/data/.local/bin:$PATH"' \
+    > /etc/profile.d/hermes-venv.sh
+
 ENV HERMES_HOME=/opt/data \
     HUGGINGMES_APP_DIR=/opt/huggingmes \
     HERMES_AGENT_VERSION=${HERMES_AGENT_VERSION} \

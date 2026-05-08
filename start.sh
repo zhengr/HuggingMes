@@ -263,6 +263,7 @@ if custom_base and model_name:
 config.setdefault("terminal", {}).setdefault("cwd", os.environ.get("MESSAGING_CWD", str(home / "workspace")))
 config.setdefault("compression", {}).setdefault("enabled", True)
 config.setdefault("display", {}).setdefault("background_process_notifications", os.environ.get("HERMES_BACKGROUND_NOTIFICATIONS", "result"))
+config.setdefault("security", {}).setdefault("redact_secrets", True)
 
 platforms = config.setdefault("platforms", {})
 
