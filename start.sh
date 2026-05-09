@@ -146,16 +146,10 @@ case "$MODEL_PREFIX" in
   openai|openai-codex)
     [ -n "$LLM_API_KEY" ] && export OPENAI_API_KEY="${OPENAI_API_KEY:-$LLM_API_KEY}"
     ;;
-  google)
+  google|gemini)
     [ -n "$LLM_API_KEY" ] && export GOOGLE_API_KEY="${GOOGLE_API_KEY:-$LLM_API_KEY}" GEMINI_API_KEY="${GEMINI_API_KEY:-$LLM_API_KEY}"
-    # Keep full "google/model-name" — Hermes infers provider from prefix.
-    # Don't set PROVIDER_FOR_CONFIG; a separate provider field conflicts.
-    MODEL_FOR_CONFIG="$MODEL_INPUT"
-    ;;
-  gemini)
-    [ -n "$LLM_API_KEY" ] && export GOOGLE_API_KEY="${GOOGLE_API_KEY:-$LLM_API_KEY}" GEMINI_API_KEY="${GEMINI_API_KEY:-$LLM_API_KEY}"
-    # Normalize "gemini/model" → "google/model" for Hermes.
-    MODEL_FOR_CONFIG="google/${MODEL_INPUT#gemini/}"
+    PROVIDER_FOR_CONFIG="gemini"
+    MODEL_FOR_CONFIG="${MODEL_INPUT#*/}"   # strip "google/" or "gemini/" prefix — Hermes gemini provider needs bare model name
     ;;
   deepseek)
     [ -n "$LLM_API_KEY" ] && export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$LLM_API_KEY}"
