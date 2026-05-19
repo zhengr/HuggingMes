@@ -22,6 +22,10 @@ secrets:
     description: "Hugging Face token with write access. Used for automatic workspace backup and HF providers."
   - name: CLOUDFLARE_WORKERS_TOKEN
     description: "Cloudflare API token for automatic Worker proxy and KeepAlive setup."
+  - name: DEV_MODE
+    description: "Set to 'true' to enable the JupyterLab terminal at /terminal/."
+  - name: JUPYTER_TOKEN
+    description: "Strong token to secure JupyterLab terminal access (required when DEV_MODE=true). Generate: openssl rand -hex 32"
 ---
 
 <!-- Badges -->
@@ -44,7 +48,7 @@ secrets:
 - [💾 Backup & Persistence](#-backup--persistence)
 - [💓 Staying Alive](#-staying-alive-recommended-on-free-hf-spaces)
 - [🔐 Security & Advanced](#-security--advanced)
-- [💻 Local Development](#-local-development)
+- [💻 Terminal Access (JupyterLab)](#-terminal-access-jupyterlab)
 - [🏗️ Architecture](#-architecture)
 - [🐛 Troubleshooting](#-troubleshooting)
 - [🌟 More Projects](#-more-projects)
@@ -57,6 +61,7 @@ secrets:
 - 📊 **Dashboard:** Real-time view of uptime, sync health, and agent status at `/`.
 - 💾 **Persistent Backup:** Syncs chats, config, and session data to a private HF Dataset.
 - ⏰ **Keep-Alive:** Can provision a cron-triggered Cloudflare Worker to keep the Space awake.
+- 💻 **Terminal Access:** Optional JupyterLab terminal at `/terminal/` for direct shell access (enable with `DEV_MODE=true`).
 - 🤖 **Broad Provider Support:** Supports Hermes' native providers, direct API-key providers, OAuth providers, and custom OpenAI-compatible endpoints.
 
 ## 🎥 Video Tutorial
@@ -197,6 +202,29 @@ With `CLOUDFLARE_WORKERS_TOKEN` set, HuggingMes can create a keep-alive worker t
 | `SYNC_INTERVAL` | `600` | Backup frequency in seconds |
 | `CLOUDFLARE_KEEPALIVE_ENABLED` | `true` | Set `false` to disable keep-awake worker |
 | `TELEGRAM_MODE` | `webhook` | `webhook` or `polling` |
+| `DEV_MODE` | `false` | Set `true` to enable JupyterLab terminal at `/terminal/` |
+| `JUPYTER_TOKEN` | — | Required when `DEV_MODE=true` — secures terminal access |
+
+## 💻 Terminal Access (JupyterLab)
+
+HuggingMes includes an optional JupyterLab terminal at `/terminal/` for direct shell access to the container — useful for running `hermes` commands, inspecting files, installing packages, and debugging.
+
+### Setup
+
+1. Add two secrets to your Space:
+   - `DEV_MODE` = `true`
+   - `JUPYTER_TOKEN` = a strong random token (`openssl rand -hex 32`)
+2. Restart the Space.
+3. Open `https://your-space.hf.space/terminal/` — log in with your `GATEWAY_TOKEN` first, then JupyterLab will prompt for `JUPYTER_TOKEN`.
+
+> **Security:** JupyterLab grants full shell access to the container. Always use a strong, unique `JUPYTER_TOKEN`. The terminal will refuse to start if `JUPYTER_TOKEN` is empty or set to the insecure default.
+
+### What you can do
+
+- Run `hermes` CLI commands directly
+- Browse and edit files in the workspace
+- Install Python packages with `pip` or `uv pip`
+- Check logs, inspect config, debug issues
 
 ## 💻 Local Development
 
@@ -211,6 +239,7 @@ docker compose up --build
 - **Dashboard (`/`)**: Real-time management and monitoring.
 - **Hermes App (`/app/`)**: Secure proxied access to the Hermes UI.
 - **API (`/v1/*`)**: Proxied OpenAI-compatible agent API.
+- **Terminal (`/terminal/`)**: JupyterLab terminal (requires `DEV_MODE=true`).
 - **Health Check (`/health`)**: Readiness probe for HF and keep-alive.
 - **Sync Engine**: Python background task for HF Dataset persistence.
 
