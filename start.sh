@@ -308,6 +308,49 @@ echo "Dashboard : http://127.0.0.1:${DASHBOARD_PORT}"
 echo "Gateway   : http://127.0.0.1:${GATEWAY_API_PORT}"
 echo ""
 
+# ── JupyterLab terminal (DEV_MODE=true + JUPYTER_TOKEN required) ──
+start_jupyter() {
+  if [ "${DEV_MODE:-false}" != "true" ]; then
+    echo "JupyterLab disabled (set DEV_MODE=true to enable /terminal/)."
+    return 0
+  fi
+  if [ -z "${JUPYTER_TOKEN:-}" ] || [ "${JUPYTER_TOKEN}" = "huggingface" ]; then
+    echo "ERROR: JUPYTER_TOKEN unset or insecure default. JupyterLab grants full shell — set a strong token." >&2
+    echo "       Hint: openssl rand -hex 32" >&2
+    return 1
+  fi
+  if ! python3 -c "import jupyterlab" >/dev/null 2>&1; then
+    echo "WARNING: jupyterlab not installed; skipping terminal." >&2
+    return 1
+  fi
+  local root_dir="${JUPYTER_ROOT_DIR:-$HERMES_HOME/workspace}"
+  mkdir -p "$root_dir"
+  ln -sfn "$HERMES_HOME" "$root_dir/HuggingMes" 2>/dev/null || true
+  echo "Starting JupyterLab terminal on port 8888 (path: /terminal/) root: $root_dir"
+  python3 -m jupyterlab \
+    --ip 127.0.0.1 \
+    --port 8888 \
+    --no-browser \
+    --IdentityProvider.token="$JUPYTER_TOKEN" \
+    --ServerApp.base_url=/terminal/ \
+    --ServerApp.terminals_enabled=True \
+    --ServerApp.terminado_settings='{"shell_command":["/bin/bash","-i"]}' \
+    --ServerApp.allow_origin='*' \
+    --ServerApp.allow_remote_access=True \
+    --ServerApp.trust_xheaders=True \
+    --ServerApp.tornado_settings="{'headers': {'Content-Security-Policy': 'frame-ancestors *'}}" \
+    --IdentityProvider.cookie_options="{'SameSite': 'None', 'Secure': True}" \
+    --ServerApp.disable_check_xsrf=True \
+    --LabApp.news_url=None \
+    --LabApp.check_for_updates_class=jupyterlab.NeverCheckForUpdate \
+    --ServerApp.log_level=WARN \
+    --ServerApp.root_dir="$root_dir" \
+    >> "$HERMES_HOME/logs/jupyter.log" 2>&1 &
+  JUPYTER_PID=$!
+  export JUPYTER_PID
+  echo "JupyterLab started (PID: $JUPYTER_PID)"
+}
+
 # ── Trap SIGTERM for graceful shutdown ──
 graceful_shutdown() {
   echo "Shutting down HuggingMes..."
@@ -370,6 +413,8 @@ fi
 if [ -n "${HF_TOKEN:-}" ]; then
   python3 -u "$APP_DIR/hermes-sync.py" loop &
 fi
+
+start_jupyter
 
 wait "$GATEWAY_PID"
 

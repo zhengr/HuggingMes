@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/* \
-    && uv pip install --python /opt/hermes/.venv/bin/python --no-cache-dir huggingface_hub hf_transfer
+    && uv pip install --python /opt/hermes/.venv/bin/python --no-cache-dir huggingface_hub hf_transfer jupyterlab
 
 COPY --chown=hermes:hermes start.sh /opt/huggingmes/start.sh
 COPY --chown=hermes:hermes health-server.js /opt/huggingmes/health-server.js

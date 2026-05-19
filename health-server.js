@@ -9,7 +9,9 @@ const PORT = Number(process.env.PORT || 7861);
 const GATEWAY_PORT = Number(process.env.API_SERVER_PORT || 8642);
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 9119);
 const TELEGRAM_WEBHOOK_PORT = Number(process.env.TELEGRAM_WEBHOOK_PORT || 8765);
+const JUPYTER_PORT = 8888;
 const GATEWAY_HOST = "127.0.0.1";
+const TERMINAL_BASE = "/terminal";
 const startTime = Date.now();
 const API_SERVER_KEY = process.env.API_SERVER_KEY || "";
 const APP_BASE = "/app";
@@ -662,10 +664,50 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (path === TERMINAL_BASE || path.startsWith(`${TERMINAL_BASE}/`)) {
+    if (!requireAuth(req, res)) return;
+    canConnect(JUPYTER_PORT).then((up) => {
+      if (!up) {
+        res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
+        res.end("JupyterLab is not running. Set DEV_MODE=true and JUPYTER_TOKEN in Space secrets to enable /terminal/.");
+        return;
+      }
+      proxyRequest(req, res, JUPYTER_PORT);
+    });
+    return;
+  }
+
   res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
   res.end("Not found");
 });
 
+// ── WebSocket upgrade (JupyterLab terminals + kernels need this) ──
+server.on("upgrade", (req, socket, head) => {
+  const { pathname } = new URL(req.url, "http://localhost");
+  const isJupyter = pathname === TERMINAL_BASE || pathname.startsWith(`${TERMINAL_BASE}/`);
+  const targetPort = isJupyter ? JUPYTER_PORT : GATEWAY_PORT;
+  const ps = net.createConnection(targetPort, GATEWAY_HOST, () => {
+    ps.write(`${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`);
+    ps.write(`Host: ${GATEWAY_HOST}:${targetPort}\r\n`);
+    ps.write(`X-Forwarded-Host: ${req.headers.host || ""}\r\n`);
+    ps.write("X-Forwarded-Proto: https\r\n");
+    for (let i = 0; i < req.rawHeaders.length; i += 2) {
+      const lower = req.rawHeaders[i].toLowerCase();
+      if (["host", "x-forwarded-host", "x-forwarded-proto"].includes(lower)) continue;
+      ps.write(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`);
+    }
+    ps.write("\r\n");
+    if (head && head.length) ps.write(head);
+    ps.pipe(socket).pipe(ps);
+  });
+  ps.on("error", () => socket.destroy());
+  ps.on("close", () => socket.destroy());
+  socket.on("error", () => ps.destroy());
+  socket.on("close", () => ps.destroy());
+});
+
+server.timeout = 0;
+server.keepAliveTimeout = 65000;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`HuggingMes dashboard listening on 0.0.0.0:${PORT}`);
 });
