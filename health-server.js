@@ -116,42 +116,36 @@ function loginUrl(nextPath) {
 
 function renderLoginPage(nextPath, errorMessage = "") {
   const safeNext = sanitizeNext(nextPath);
-  const errorHtml = errorMessage
-    ? `<div class="error">${escapeHtml(errorMessage)}</div>`
-    : "";
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HuggingMes Login</title>
+  return `<!doctype html><html lang="en"><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>HuggingMes</title>
   <style>
-    :root { color-scheme: dark; --bg:#10141f; --panel:#171d2b; --line:#293246; --text:#f4f7fb; --muted:#9aa7bd; --bad:#ef4444; --accent:#38bdf8; }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; display:grid; place-items:center; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); padding:20px; }
-    main { width:min(440px, 100%); border:1px solid var(--line); background:var(--panel); border-radius:8px; padding:28px; }
-    h1 { margin:0 0 8px; font-size:1.55rem; letter-spacing:0; }
-    p { margin:0 0 22px; color:var(--muted); line-height:1.5; }
-    label { display:block; color:var(--muted); font-size:.82rem; margin-bottom:8px; }
-    input { width:100%; min-height:46px; border:1px solid var(--line); border-radius:7px; background:#0b0f18; color:var(--text); padding:0 12px; font:inherit; }
-    button { width:100%; min-height:44px; margin-top:16px; border:0; border-radius:7px; color:#07111f; background:var(--accent); font:inherit; font-weight:750; cursor:pointer; }
-    .error { border:1px solid rgba(239,68,68,.4); background:rgba(239,68,68,.1); color:#fecaca; border-radius:7px; padding:10px 12px; margin-bottom:16px; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Open HuggingMes</h1>
-    <p>Enter the <code>GATEWAY_TOKEN</code> from your Space secrets.</p>
-    ${errorHtml}
+    :root{color-scheme:dark;--bg:#08080f;--panel:#12111b;--line:#26243a;--text:#f6f4ff;--muted:#7f7a9e;--bad:#fb7185}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);padding:24px}
+    .card{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:36px 32px;max-width:400px;width:100%;text-align:center}
+    h1{margin:0 0 8px;font-size:1.4rem}
+    .sub{color:var(--muted);font-size:.82rem;margin:0 0 24px}
+    .row{display:flex;gap:8px;margin-top:16px}
+    input{flex:1;background:#0d0c18;border:1px solid var(--line);border-radius:7px;padding:10px 12px;color:var(--text);font-size:.95rem;outline:none;transition:border-color .15s}
+    input:focus{border-color:#6366f1}
+    button{background:#fff;color:#000;border:none;border-radius:7px;padding:10px 20px;font-weight:700;font-size:.95rem;cursor:pointer;transition:opacity .15s;white-space:nowrap}
+    button:hover{opacity:.85}
+    .err{color:var(--bad);font-size:.82rem;margin-top:10px}
+    code{background:#232234;border:1px solid #34324c;border-radius:5px;padding:2px 6px;font-size:.88em}
+  </style></head><body>
+  <div class="card">
+    <h1>🪽 HuggingMes</h1>
+    <p class="sub">Enter your <code>GATEWAY_TOKEN</code> to continue</p>
     <form method="post" action="${LOGIN_PATH}">
       <input type="hidden" name="next" value="${escapeHtml(safeNext)}" />
-      <label for="token">GATEWAY_TOKEN</label>
-      <input id="token" name="token" type="password" autocomplete="current-password" autofocus required />
-      <button type="submit">Continue</button>
+      <div class="row">
+        <input type="password" name="token" placeholder="GATEWAY_TOKEN" autofocus autocomplete="current-password" required>
+        <button type="submit">Unlock</button>
+      </div>
+      ${errorMessage ? `<p class="err">Invalid token — try again</p>` : ""}
     </form>
-  </main>
-</body>
-</html>`;
+  </div>
+</body></html>`;
 }
 
 function escapeHtml(value) {
@@ -590,6 +584,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/env-builder" || path === "/env-builder/") {
+    if (!requireAuth(req, res)) return;
     try {
       const html = fs.readFileSync(require("path").join(__dirname, "env-builder.html"), "utf8");
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -602,6 +597,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/env-builder.js") {
+    if (!requireAuth(req, res)) return;
     try {
       const js = fs.readFileSync(require("path").join(__dirname, "env-builder.js"), "utf8");
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8" });
@@ -707,7 +703,11 @@ const server = http.createServer(async (req, res) => {
         res.end("JupyterLab is not running. Set DEV_MODE=true and JUPYTER_TOKEN in Space secrets to enable /terminal/.");
         return;
       }
-      proxyRequest(req, res, JUPYTER_PORT);
+      // Inject the Jupyter token so JupyterLab skips its own login screen.
+      // User already authenticated via GATEWAY_TOKEN — no second prompt needed.
+      const jToken = process.env.JUPYTER_TOKEN || "";
+      const overrides = jToken ? { authorization: `token ${jToken}` } : {};
+      proxyRequest(req, res, JUPYTER_PORT, (p) => p, overrides);
     });
     return;
   }
