@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-05-20
+
+### Fixes
+
+- **Build fails after update** — `libasound2` renamed to `libasound2t64` in Debian bookworm. Dockerfile now tries both names, falling back gracefully so builds succeed on all base image variants.
+- **Unpinned jupyterlab breaks venv** — `uv pip install jupyterlab` without a version constraint could pull a release incompatible with existing Hermes venv packages. Pinned to `>=4.0,<5` range to bound resolution.
+- **`uv` not in PATH during Docker build** — switched from bare `uv` to explicit `/opt/hermes/.venv/bin/uv` so the install works regardless of base image PATH configuration.
+- **`visudo` not in PATH during Docker build** — switched to explicit `/usr/sbin/visudo` path.
+
 ## 0.2.0 - 2026-05-19
 
 ### Features
