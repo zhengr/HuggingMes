@@ -950,7 +950,11 @@ const server = http.createServer(async (req, res) => {
       }
       // Inject the Jupyter token so JupyterLab skips its own login screen.
       // User already authenticated via GATEWAY_TOKEN — no second prompt needed.
-      const jToken = process.env.JUPYTER_TOKEN || "";
+      // JUPYTER_TOKEN env may be empty in this process (health-server starts before
+      // start_jupyter() exports it), so fall back to API_SERVER_KEY (== GATEWAY_TOKEN),
+      // which is what JupyterLab was actually started with.
+      const rawJToken = (process.env.JUPYTER_TOKEN || "").trim();
+      const jToken = rawJToken || API_SERVER_KEY;
       const overrides = jToken ? { authorization: `token ${jToken}` } : {};
       proxyRequest(req, res, JUPYTER_PORT, (p) => p, overrides);
     });
