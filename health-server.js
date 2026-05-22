@@ -660,6 +660,8 @@ function renderDashboard(data) {
     .button.secondary { color:var(--text); background:#242424; border:1px solid var(--line); }
     footer { color:var(--muted); text-align:center; font-size:.74rem; margin-top:18px; }
     footer .live { color:var(--good); }
+    .warn-banner { background:rgba(245,197,66,.1); border:1px solid rgba(245,197,66,.35); border-radius:8px; padding:10px 14px; margin-bottom:16px; color:var(--warn); font-size:.82rem; line-height:1.5; }
+    .warn-banner strong { font-weight:700; }
     @media (max-width: 700px) { .overview { grid-template-columns:1fr; } main { width:min(100% - 22px, 720px); padding-top:28px; } }
   </style>
 </head>
@@ -674,6 +676,7 @@ function renderDashboard(data) {
       <a class="hero-action secondary" data-space-link="terminal" href="/terminal/">💻 Open Terminal →</a>
       <a class="hero-action secondary" data-space-link="env-builder" href="/env-builder">⚙️ ENV Builder →</a>
     </div>
+    ${syncStatus === "disabled" ? `<div class="warn-banner">⚠️ <strong>Backup is disabled.</strong> HF Spaces storage is ephemeral — all Hermes data (chats, config, memory) will be lost on every Space restart. Set <code>HF_TOKEN</code> in Space secrets to enable automatic backup.</div>` : ""}
     <section class="overview">
       ${tiles}
     </section>
@@ -945,7 +948,7 @@ const server = http.createServer(async (req, res) => {
     canConnect(JUPYTER_PORT).then((up) => {
       if (!up) {
         res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
-        res.end("JupyterLab is not running. Set DEV_MODE=true and JUPYTER_TOKEN in Space secrets to enable /terminal/.");
+        res.end("JupyterLab is not running. GATEWAY_TOKEN must be set, and DEV_MODE must not be false.");
         return;
       }
       // Inject the Jupyter token so JupyterLab skips its own login screen.
@@ -955,6 +958,18 @@ const server = http.createServer(async (req, res) => {
       // which is what JupyterLab was actually started with.
       const rawJToken = (process.env.JUPYTER_TOKEN || "").trim();
       const jToken = rawJToken || API_SERVER_KEY;
+      // JupyterLab 4.x ignores the Authorization header for HTML page loads and
+      // shows its own login screen. The reliable fix is to inject ?token= into the
+      // URL for the initial HTML request — Jupyter reads it, sets the auth cookie,
+      // then redirects to the clean URL. All subsequent requests use the cookie.
+      if (jToken && isHtmlReq) {
+        const parsed2 = new URL(req.url, "http://localhost");
+        if (!parsed2.searchParams.has("token")) {
+          const sep = parsed2.search ? "&" : "?";
+          redirect(res, `${parsed2.pathname}${parsed2.search}${sep}token=${encodeURIComponent(jToken)}`);
+          return;
+        }
+      }
       const overrides = jToken ? { authorization: `token ${jToken}` } : {};
       proxyRequest(req, res, JUPYTER_PORT, (p) => p, overrides);
     });
