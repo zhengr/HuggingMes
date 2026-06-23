@@ -980,34 +980,32 @@ const server = http.createServer(async (req, res) => {
   res.end("Not found");
 });
 
-// ── WebSocket upgrade (JupyterLab terminals + Hermes dashboard PTY/events) ──
+// ── WebSocket upgrade (JupyterLab terminals + kernels need this) ──
 server.on("upgrade", (req, socket, head) => {
   const { pathname } = new URL(req.url, "http://localhost");
   const isJupyter = pathname === TERMINAL_BASE || pathname.startsWith(`${TERMINAL_BASE}/`);
+  // /api/* WebSocket (e.g. /api/events) is served by the dashboard process,
+  // not the gateway — match the same routing rule as the HTTP handler above.
   const isDashboardWs =
-      pathname === "/api/pty" ||
-      pathname === "/api/events" ||
-      pathname === "/api/ws";
-  const targetPort = isJupyter
-      ? JUPYTER_PORT
-      : isDashboardWs
-          ? DASHBOARD_PORT
-          : GATEWAY_PORT;
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/assets/") ||
+      pathname.startsWith("/dashboard-plugins/") ||
+      pathname.startsWith("/ds-assets/");
+  const targetPort = isJupyter ? JUPYTER_PORT : isDashboardWs ? DASHBOARD_PORT : GATEWAY_PORT;
   const ps = net.createConnection(targetPort, GATEWAY_HOST, () => {
     ps.write(`${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`);
     ps.write(`Host: ${GATEWAY_HOST}:${targetPort}\r\n`);
     ps.write(`X-Forwarded-Host: ${req.headers.host || ""}\r\n`);
     ps.write("X-Forwarded-Proto: https\r\n");
-    // Dashboard refuses WS if Origin-Host != Loopback-Bind
-    // Rewrite Origin to Loopback for accepting PTY/events
-    const skip = ["host", "x-forwarded-host", "x-forwarded-proto"];
-    if (isDashboardWs) {
-      ps.write(`Origin: http://${GATEWAY_HOST}:${targetPort}\r\n`);
-      skip.push("origin");
-    }
     for (let i = 0; i < req.rawHeaders.length; i += 2) {
       const lower = req.rawHeaders[i].toLowerCase();
-      if (skip.includes(lower)) continue;
+      if (["host", "x-forwarded-host", "x-forwarded-proto"].includes(lower)) continue;
+      if (lower === "origin") {
+        // hermes _ws_host_origin_is_allowed() rejects external origins like
+        // target address so the check passes.
+        ps.write(`Origin: http://${GATEWAY_HOST}:${targetPort}\r\n`);
+        continue;
+      }
       ps.write(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`);
     }
     ps.write("\r\n");
