@@ -373,7 +373,18 @@ function proxyRequest(
       headers,
     },
     (upstream) => {
-      res.writeHead(upstream.statusCode || 502, upstream.headers);
+      // Strip hop-by-hop headers; Node.js manages transfer-encoding internally.
+      // Passing transfer-encoding from upstream causes double-chunking which
+      // breaks SSE streams (events never flush to the client).
+      const headers = { ...upstream.headers };
+      delete headers["transfer-encoding"];
+      delete headers["connection"];
+      delete headers["keep-alive"];
+      res.writeHead(upstream.statusCode || 502, headers);
+      // Disable Nagle's algorithm for SSE so small event packets flush immediately.
+      if ((headers["content-type"] || "").includes("text/event-stream")) {
+        res.socket?.setNoDelay(true);
+      }
       upstream.pipe(res);
     },
   );
@@ -402,11 +413,14 @@ function formatUptime(ms) {
 }
 
 async function statusPayload() {
-  const gateway = await canConnect(GATEWAY_PORT);
-  const dashboard = await canConnect(DASHBOARD_PORT);
-  const telegramWebhook =
-    !!process.env.TELEGRAM_WEBHOOK_URL &&
-    (await canConnect(TELEGRAM_WEBHOOK_PORT));
+  const [gateway, dashboard, telegramWebhookUp] = await Promise.all([
+    canConnect(GATEWAY_PORT, GATEWAY_HOST, 2000),
+    canConnect(DASHBOARD_PORT),
+    process.env.TELEGRAM_WEBHOOK_URL
+        ? canConnect(TELEGRAM_WEBHOOK_PORT)
+        : Promise.resolve(false),
+  ]);
+  const telegramWebhook = !!process.env.TELEGRAM_WEBHOOK_URL && telegramWebhookUp;
   const sync = readJson(
     SYNC_STATUS_FILE,
     process.env.HF_TOKEN
@@ -522,41 +536,43 @@ function renderTile({
 
 function renderDashboard(data) {
   const syncStatus = String(data.backup?.status || "unknown");
-  const syncTone = ["success", "restored", "synced", "configured"].includes(
-    syncStatus,
-  )
-    ? "ok"
-    : syncStatus === "disabled"
-      ? "warn"
-      : "neutral";
-  const telegramTone = data.telegram.configured
-    ? data.telegram.webhookListening || !data.telegram.webhook
-      ? "ok"
-      : "warn"
-    : "warn";
+  const SYNC_OK_STATES = ["success", "restored", "synced", "configured"];
+  let syncTone = "neutral";
+  if (SYNC_OK_STATES.includes(syncStatus)) syncTone = "ok";
+  else if (syncStatus === "disabled") syncTone = "warn";
+
+  let telegramTone = "neutral";
+  if (data.telegram.configured && (data.telegram.webhookListening || !data.telegram.webhook)) {
+    telegramTone = "ok";
+  } else if (data.telegram.configured) {
+    telegramTone = "warn";
+  }
+
   const keepaliveConfigured = data.keepalive?.configured === true;
   const keepaliveStatus = String(
-    data.keepalive?.status ||
+      data.keepalive?.status ||
       (process.env.CLOUDFLARE_WORKERS_TOKEN ? "pending" : "not configured"),
   );
-  const keepAliveTone = keepaliveConfigured
-    ? "ok"
-    : process.env.CLOUDFLARE_WORKERS_TOKEN
-      ? "warn"
-      : "neutral";
+
+  let keepAliveTone = "neutral";
+  if (keepaliveConfigured) keepAliveTone = "ok";
+  else if (process.env.CLOUDFLARE_WORKERS_TOKEN) keepAliveTone = "warn";
   const telegramDetail = data.telegram.configured
     ? `${data.telegram.webhook ? "Webhook" : "Polling"}${data.telegram.proxy ? " via CF proxy" : ""}`
     : "Not configured";
   const backupDetail = data.backup?.message
     ? escapeHtml(data.backup.message)
     : "No status yet";
-  const keepAliveDetail = keepaliveConfigured
-    ? `Pinging <code>${escapeHtml(data.keepalive.targetUrl || "/health")}</code>`
-    : keepaliveStatus === "error" && data.keepalive?.message
-      ? escapeHtml(data.keepalive.message)
-      : process.env.CLOUDFLARE_WORKERS_TOKEN
-        ? "Worker pending or failed"
-        : "Not configured";
+  let keepAliveDetail;
+  if (keepaliveConfigured) {
+    keepAliveDetail = `Pinging <code>${escapeHtml(data.keepalive.targetUrl || "/health")}</code>`;
+  } else if (keepaliveStatus === "error" && data.keepalive?.message) {
+    keepAliveDetail = escapeHtml(data.keepalive.message);
+  } else if (process.env.CLOUDFLARE_WORKERS_TOKEN) {
+    keepAliveDetail = "Worker pending or failed";
+  } else {
+    keepAliveDetail = "Not configured";
+  }
   const serviceOk = data.gateway && data.dashboard;
 
   const tiles = [
@@ -618,6 +634,7 @@ function renderDashboard(data) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="15" />
   <title>HuggingMes</title>
   <style>
     :root { color-scheme: dark; --bg:#08080f; --panel:#12111b; --panel2:#151421; --line:#26243a; --text:#f6f4ff; --muted:#7f7a9e; --soft:#b8b3d7; --good:#22c55e; --warn:#f5c542; --bad:#fb7185; --accent:#6557df; --accent2:#7c6cf2; }
