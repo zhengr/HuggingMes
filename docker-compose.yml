@@ -15,7 +15,6 @@ services:
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       HF_TOKEN: ${HF_TOKEN:-}
       SPACE_HOST: ${SPACE_HOST:-localhost:7861}
-      DEV_MODE: ${DEV_MODE:-true}
     volumes:
       - huggingmes-data:/opt/data
 
