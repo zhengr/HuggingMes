@@ -15,6 +15,8 @@ const GATEWAY_HOST = "127.0.0.1";
 const TERMINAL_BASE = "/terminal";
 const startTime = Date.now();
 const API_SERVER_KEY = process.env.API_SERVER_KEY || "";
+const DEV_MODE = (process.env.DEV_MODE || "true").toLowerCase() !== "false";
+const ENABLE_ENV_BUILDER = (process.env.ENABLE_ENV_BUILDER || "false").toLowerCase() === "true";
 const APP_BASE = "/app";
 const LOGIN_PATH = "/login";
 const SESSION_COOKIE = "huggingmes_session";
@@ -690,8 +692,8 @@ function renderDashboard(data) {
     </header>
     <div class="hero-buttons">
       <a class="hero-action" data-space-link="app" href="${APP_BASE}/">Open Hermes Agent →</a>
-      <a class="hero-action secondary" data-space-link="terminal" href="/terminal/">💻 Open Terminal →</a>
-      <a class="hero-action secondary" data-space-link="env-builder" href="/env-builder">⚙️ ENV Builder →</a>
+      ${DEV_MODE ? `<a class="hero-action secondary" data-space-link="terminal" href="/terminal/">💻 Open Terminal →</a>` : ""}
+      ${ENABLE_ENV_BUILDER ? `<a class="hero-action secondary" data-space-link="env-builder" href="/env-builder">⚙️ ENV Builder →</a>` : ""}
     </div>
     ${syncStatus === "disabled" ? `<div class="warn-banner">⚠️ <strong>Backup is disabled.</strong> HF Spaces storage is ephemeral — all Hermes data (chats, config, memory) will be lost on every Space restart. Set <code>HF_TOKEN</code> in Space secrets to enable automatic backup.</div>` : ""}
     <section class="overview">
@@ -845,6 +847,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/env-builder" || path === "/env-builder/") {
+    if (!ENABLE_ENV_BUILDER) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
     if (!requireAuth(req, res)) return;
     try {
       const html = fs.readFileSync(require("path").join(__dirname, "env-builder.html"), "utf8");
@@ -858,6 +865,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/env-builder.js") {
+    if (!ENABLE_ENV_BUILDER) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
     if (!requireAuth(req, res)) return;
     try {
       const js = fs.readFileSync(require("path").join(__dirname, "env-builder.js"), "utf8");
