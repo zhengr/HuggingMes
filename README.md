@@ -30,6 +30,8 @@ secrets:
 [![HF Space](https://img.shields.io/badge/🤗%20HuggingFace-Space-blue?style=flat-square)](https://huggingface.co/spaces)
 [![Hermes](https://img.shields.io/badge/Hermes-Agent-indigo?style=flat-square)](https://github.com/NousResearch/hermes-agent)
 
+⚠️ WARNING: USING THIS PROJECT MAY LEAD TO THE SUSPENSION OF YOUR HUGGINGFACE ACCOUNT.
+
 **Self-hosted Hermes AI agent gateway for Hugging Face Spaces.** HuggingMes runs [Nous Research Hermes Agent](https://github.com/NousResearch/hermes-agent) on HuggingFace Spaces, giving you a 24/7 personal AI assistant with a management dashboard, persistent HF Dataset backup, and automatic connectivity fixes for blocked outbound traffic. HuggingMes directly wires the startup providers listed below, and it can also use Hermes providers configured through `hermes model` or `config.yaml`.
 
 ## Table of Contents

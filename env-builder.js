@@ -410,7 +410,7 @@ function showToast(msg = 'Copied!') {
 
 let activeGroup = 'All';
 let customCount = 0;
-const GROUPS = ['All', ...[...new Set(FIELDS.map(f => f.g))], 'Custom Env'];
+const GROUPS = ['All', ...new Set(FIELDS.map(f => f.g)), 'Custom Env'];
 
 function renderSidebar() {
   const sb = $('sidebar');

@@ -9,6 +9,7 @@ import shutil
 import signal
 import random
 import socket
+import stat
 import sys
 import tempfile
 import threading
@@ -152,12 +153,12 @@ def metadata_marker(root: Path) -> tuple[int, int, int]:
         if should_exclude(rel, path):
             continue
         try:
-            stat = path.stat()
+            file_stat = path.stat()
         except OSError:
             continue
         file_count += 1
-        total_size += int(stat.st_size)
-        newest_mtime = max(newest_mtime, int(stat.st_mtime_ns))
+        total_size += int(file_stat.st_size)
+        newest_mtime = max(newest_mtime, int(file_stat.st_mtime_ns))
     return (file_count, total_size, newest_mtime)
 
 
@@ -196,6 +197,21 @@ def create_snapshot_dir(source_root: Path) -> Path:
     return staging_root
 
 
+def _make_writable(path: Path) -> None:
+    """Recursively add owner-write permission so rmtree can delete read-only trees."""
+    for dirpath, dirs, files in os.walk(str(path)):
+        for name in dirs + files:
+            try:
+                full = os.path.join(dirpath, name)
+                os.chmod(full, os.stat(full).st_mode | stat.S_IWUSR)
+            except OSError:
+                pass
+    try:
+        os.chmod(str(path), os.stat(str(path)).st_mode | stat.S_IRWXU)
+    except OSError:
+        pass
+
+
 def restore() -> bool:
     if not HF_TOKEN:
         write_status("disabled", "HF_TOKEN is not configured.")
@@ -216,12 +232,13 @@ def restore() -> bool:
                 if should_exclude(child.name, child):
                     continue
                 target = HERMES_HOME / child.name
-                if target.is_dir():
-                    shutil.rmtree(target, ignore_errors=True)
-                elif target.exists():
+                if target.is_symlink() or target.is_file():
                     target.unlink()
+                elif target.is_dir():
+                    _make_writable(target)
+                    shutil.rmtree(target, ignore_errors=True)
                 if child.is_dir():
-                    shutil.copytree(child, target)
+                    shutil.copytree(child, target, dirs_exist_ok=True)
                 else:
                     shutil.copy2(child, target)
 
